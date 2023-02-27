@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Store;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -30,9 +31,9 @@ class InstallationController extends Controller
                         }
                     } else {
                         Log::info('Installation for shop');
-                        $endpoint = 'https://'.$request->shop.'/admin/oauth/authorize?client_id='.config('const.shopify_api_key').
-                        '&scope='.config('const.api_scopes').
-                        '&redirect_uri='.config('app.ngrok_url').'/shopify/auth/redirect';
+                        $endpoint = 'https://' . $request->shop . '/admin/oauth/authorize?client_id=' . config('const.shopify_api_key') .
+                            '&scope=' . config('const.api_scopes') .
+                            '&redirect_uri=' . config('app.ngrok_url') . '/shopify/auth/redirect';
 
                         return Redirect::to($endpoint);
                     }
@@ -43,8 +44,8 @@ class InstallationController extends Controller
                 throw new Exception('Request is not valid');
             }
         } catch (Exception $e) {
-            Log::info($e->getMessage().' '.$e->getLine());
-            dd($e->getMessage().' '.$e->getLine());
+            Log::info($e->getMessage() . ' ' . $e->getLine());
+            dd($e->getMessage() . ' ' . $e->getLine());
         }
     }
 
@@ -52,29 +53,104 @@ class InstallationController extends Controller
     {
         try {
             $validRequest = $this->validateRequestFromShopify($request->all());
-            if($validRequest) {
-                if($request->has('shop') && $request->has('code')) {
+            if ($validRequest) {
+                Log::info(json_encode($request->all()));
+                if ($request->has('shop') && $request->has('code')) {
                     $shop = $request->shop;
                     $code = $request->code;
                     $accessToken = $this->requestAccessTokenFromShopifyForThisStore($shop, $code);
-                    Log::info('Access Token '.$accessToken);
-                    if($accessToken !== false && $accessToken !== null) {
-                        $shopDetails = $this->getShopDetailsFromShopify($shop, $accessToken);
+                    if ($accessToken !== false && $accessToken !== null) {
+                        $shopDetails = $this->getShopDetailFromShopify($shop, $accessToken);
                         $saveDetails = $this->saveStoreDetailsToDatabase($shopDetails, $accessToken);
-                        if($saveDetails) {  
-                            //At this point the installation process is complete.
-                            return Redirect::route('login');
+                        if ($saveDetails) {
+                            Redirect::to(config('app.ngrok_url') . 'shop/auth/complete');
                         } else {
-                            Log::info('Problem during saving shop details into the db');
+                            Log::info('Problem during saving shop details into the DB');
                             Log::info($saveDetails);
-                            dd('Problem during installation. please check logs.');
                         }
-                    } else throw new Exception('Invalid Access Token '.$accessToken);
-                } else throw new Exception('Code / Shop param not present in the URL');
+                    } else throw new Exception('Invalid Access Token' . $accessToken);
+                } else throw new Exception('Code/ Shop param not present in URL');
             } else throw new Exception('Request is not valid!');
-        } catch(Exception $e) {
-            Log::info($e->getMessage().' '.$e->getLine());
-            dd($e->getMessage().' '.$e->getLine());
+        } catch (Exception $e) {
+            Log::info($e->getMessage() . ' ' . $e->getLine());
+            dd($e->getMessage() . ' ' . $e->getLine());
+        }
+    }
+
+    public function saveStoreDetailsToDatabase($shopDetails, $accessToken)
+    {
+        try {
+            $payload = [
+                'access_token' => $accessToken,
+                'myshopify_domain' => $shopDetails['myshopify_domain'],
+                'id' => $shopDetails['id'],
+                'name' => $shopDetails['name'],
+                'phone' => $shopDetails['phone'],
+                'address1' => $shopDetails['address1'],
+                'address2' => $shopDetails['address2'],
+                'zip' => $shopDetails['zip'],
+            ];
+            Store::updateOrCreate(['myshopify_domain' => $shopDetails['myshopify_domain']], $payload);
+
+            return true;
+        } catch (Exception $e) {
+            Log::info($e->getMessage() . '' . $e->getLine());
+
+            return false;
+        }
+    }
+
+    public function completeInstallation(Request $request)
+    {
+        print_r('Installation complete');
+        exit;
+    }
+    private function getShopDetailFromShopify($shop, $accessToken)
+    {
+        try {
+            $endpoint = getShopifyURLForStore('shop.json', ['myshopify_domain' => $shop]);
+            $headers = getShopifyHeadersForStore(['access_token' => $accessToken]);
+            $response = $this->makeAnAPICallToShop('GET', $endpoint, null, $headers, null);
+            if ($response['statusCode'] == 200) {
+                $body = $response['body'];
+                if (!is_array($body)) $body = json_decode($body, true);
+
+                return $body['shop'] ?? null;
+            } else {
+                Log::info('Response received for shop details');
+                Log::info($response);
+
+                return null;
+            }
+        } catch (Exception $e) {
+            Log::info('Problem getting the shop detail from shopify');
+            Log::info($e->getMessage() . ' ' . $e->getLine());
+        }
+    }
+    private function requestAccessTokenFromShopifyForThisStore($shop, $code)
+    {
+        try {
+            $endpoint = 'https://' . $shop . '/admin/oauth/access_token';
+            $headers = ['Content-Type' => 'application/json'];
+            $requestBody = json_encode([
+                'client_id' => config('const.shopify_api_key'),
+                'client_secret' => config('const.shopify_api_secret'),
+                'code' => $code
+            ]);
+            $response = $this->makeAPOSTCallToShopify($requestBody, $endpoint, $headers);
+            Log::info('Response for getting the access token');
+            Log::info(json_encode($response));
+
+            if ($response['statusCode'] == 200) {
+                $body = $response['body'];
+                if (!is_array($body)) $body = json_decode($body, true);
+                if (isset($body['access_token']) && $body['access_token'] != null) {
+                    return $body['access_token'];
+                }
+                return false;
+            }
+        } catch (Exception $e) {
+            Log::info($response);
         }
     }
 
@@ -92,7 +168,7 @@ class InstallationController extends Controller
                 $value = str_replace('%', '%25', $value);
                 $value = str_replace('&', '%26', $value);
 
-                $arr[] = $key.'='.$value;
+                $arr[] = $key . '=' . $value;
             }
 
             $str = implode('&', $arr);
@@ -101,7 +177,7 @@ class InstallationController extends Controller
             return $ver_hmac == $hmac;
         } catch (Exception $e) {
             Log::info('problem with verify hmac');
-            Log::info($e->getMessage().' '.$e->getLine());
+            Log::info($e->getMessage() . ' ' . $e->getLine());
         }
     }
 
@@ -112,7 +188,7 @@ class InstallationController extends Controller
                 $token = $storeDetails->access_token;
                 $endpoint = getShopifyURLForStore('shop.json', $storeDetails);
                 $headers = getShopifyHeadersForStore($storeDetails);
-                $response = $this->makeAnAPICallToShop('GET', $endpoint, null, $headers);
+                $response = $this->makeAnAPICallToShop('GET', $endpoint, null, $headers, null);
 
                 Log::info($response);
 

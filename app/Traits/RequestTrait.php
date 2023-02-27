@@ -2,16 +2,23 @@
 
 namespace App\Traits;
 
+use Exception;
+use GuzzleHttp\Client;
+
 trait RequestTrait
 {
-    public function makeAnAPICallToShop($method, $url, $url_params, $headers, $responseBody = null)
+    public function makeAnAPICallToShop($method, $endpoint, $url_params, $headers, $requestBody = null)
     {
+        // dd($headers, $requestBody);
         try {
             $client = new Client();
             $response = null;
             switch ($method) {
                 case 'GET':
-                    $response = $client->request($method, $url, ['header' => $headers]);
+                    $response = $client->request($method, $endpoint, ['headers' => $headers]);
+                    break;
+                case 'POST':
+                    $response = $client->request($method, $endpoint, ['headers' => $headers, 'form_params' => $requestBody]);
                     break;
             }
 
@@ -26,5 +33,24 @@ trait RequestTrait
                 'body' => null,
             ];
         }
+    }
+
+    public function makeAPOSTCallToShopify($payload, $endpoint, $headers = NULL) {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $endpoint);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers === NULL ? [] : $headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_VERBOSE, 0);
+        curl_setopt($ch, CURLOPT_HEADER, true);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        $result = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $aHeaderInfo = curl_getinfo($ch);
+        $curlHeaderSize = $aHeaderInfo['header_size'];
+        $sBody = trim(mb_substr($result, $curlHeaderSize));
+
+        return ['statusCode' => $httpCode, 'body' => $sBody];
     }
 }

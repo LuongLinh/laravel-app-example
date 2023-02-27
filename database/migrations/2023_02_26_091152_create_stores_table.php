@@ -13,13 +13,13 @@ return new class extends Migration
     {
         Schema::create('stores', function (Blueprint $table) {
             $table->bigIncrements('table_id');
-            $table->integer('id')->nullable();
+            $table->unsignedBigInteger('id')->nullable();
             $table->string('name')->nullable();
             $table->string('access_token')->nullable();
             $table->string('phone')->nullable();
             $table->string('myshopify_domain')->nullable();
-            $table->string('adrress1')->nullable();
-            $table->string('adrress2')->nullable();
+            $table->string('address')->nullable();
+            $table->string('address2')->nullable();
             $table->string('zip')->nullable();
             $table->timestamps();
         });

@@ -1,13 +1,13 @@
 <?php
 
-if (! function_exists('getShopifyURLForStore')) {
+if (!function_exists('getShopifyURLForStore')) {
     function getShopifyURLForStore($endpoint, $store)
-    {dd($store);
+    {
         return 'https://'.$store['myshopify_domain'].'/admin/api/'.config('const.shopify_api_version').'/'.$endpoint;
     }
 }
 
-if (! function_exists('getShopifyHeadersForStore')) {
+if (!function_exists('getShopifyHeadersForStore')) {
     function getShopifyHeadersForStore($storeDetails)
     {
         return [

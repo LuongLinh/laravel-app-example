@@ -9,7 +9,6 @@ trait RequestTrait
 {
     public function makeAnAPICallToShop($method, $endpoint, $url_params, $headers, $requestBody = null)
     {
-        // dd($headers, $requestBody);
         try {
             $client = new Client();
             $response = null;
@@ -50,7 +49,6 @@ trait RequestTrait
         $aHeaderInfo = curl_getinfo($ch);
         $curlHeaderSize = $aHeaderInfo['header_size'];
         $sBody = trim(mb_substr($result, $curlHeaderSize));
-
         return ['statusCode' => $httpCode, 'body' => $sBody];
     }
 }

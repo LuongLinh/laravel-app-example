@@ -13,7 +13,8 @@ class InstallationController extends Controller
     public function startInstallation(Request $request)
     {
         try {
-            $validRequest = $this->validateRequestFromShopify($request->all());
+            // $validRequest = $this->validateRequestFromShopify($request->all());
+            $validRequest = $this->verifyHmacAppInstall($request->all());
             if ($validRequest) {
                 $shop = $request->has('shop');
                 if ($shop) {
@@ -49,6 +50,51 @@ class InstallationController extends Controller
         }
     }
 
+
+    // private function validateRequestFromShopify($request)
+    // {
+    //     try {
+    //         $arr = [];
+    //         $hmac = $request['hmac'];
+    //         unset($request['hmac']);
+
+    //         foreach ($request as $key => $value) {
+    //             $key = str_replace('%', '%25', $key);
+    //             $key = str_replace('&', '%26', $key);
+    //             $key = str_replace('=', '%3D', $key);
+    //             $value = str_replace('%', '%25', $value);
+    //             $value = str_replace('&', '%26', $value);
+
+    //             $arr[] = $key . '=' . $value;
+    //         }
+
+    //         $str = implode('&', $arr);
+    //         $ver_hmac = hash_hmac('sha256', $str, config('const.shopify_api_secret'), false);
+
+    //         return $ver_hmac == $hmac;
+    //     } catch (Exception $e) {
+    //         Log::info('problem with verify hmac');
+    //         Log::info($e->getMessage() . ' ' . $e->getLine());
+    //     }
+    // }
+
+    private function verifyHmacAppInstall($request)
+    {
+        $params = [];
+
+        foreach ($request as $key => $value) {
+            if ($key != 'hmac') {
+                $params[$key] = "{$key}={$value}";
+            }
+        }
+        asort($params);
+        $params = implode('&', $params);
+        $hmac = $request['hmac'];
+        $ver_hmac = hash_hmac('sha256', $params, config('const.shopify_api_secret'));
+
+        return ($hmac == $ver_hmac);
+    }
+
     public function handleRedirect(Request $request)
     {
         try {
@@ -67,6 +113,7 @@ class InstallationController extends Controller
                         } else {
                             Log::info('Problem during saving shop details into the DB');
                             Log::info($saveDetails);
+                            dd('check log');
                         }
                     } else throw new Exception('Invalid Access Token' . $accessToken);
                 } else throw new Exception('Code/ Shop param not present in URL');
@@ -131,16 +178,14 @@ class InstallationController extends Controller
     {
         try {
             $endpoint = 'https://' . $shop . '/admin/oauth/access_token';
-            $headers = ['Content-Type' => 'application/json'];
-            $requestBody = json_encode([
+            $headers = ['Content-Type => application/json'];
+            $requestBody = [
                 'client_id' => config('const.shopify_api_key'),
                 'client_secret' => config('const.shopify_api_secret'),
                 'code' => $code
-            ]);
-            $response = $this->makeAPOSTCallToShopify($requestBody, $endpoint, $headers);
-            Log::info('Response for getting the access token');
+            ];
+            $response = $this->makeAnAPICallToShop('POST', $endpoint, null, $headers, $requestBody);
             Log::info(json_encode($response));
-
             if ($response['statusCode'] == 200) {
                 $body = $response['body'];
                 if (!is_array($body)) $body = json_decode($body, true);
@@ -154,33 +199,6 @@ class InstallationController extends Controller
         }
     }
 
-    private function validateRequestFromShopify($request)
-    {
-        try {
-            $arr = [];
-            $hmac = $request['hmac'];
-            unset($request['hmac']);
-
-            foreach ($request as $key => $value) {
-                $key = str_replace('%', '%25', $key);
-                $key = str_replace('&', '%26', $key);
-                $key = str_replace('=', '%3D', $key);
-                $value = str_replace('%', '%25', $value);
-                $value = str_replace('&', '%26', $value);
-
-                $arr[] = $key . '=' . $value;
-            }
-
-            $str = implode('&', $arr);
-            $ver_hmac = hash_hmac('sha256', $str, config('const.shopify_api_secret'), false);
-
-            return $ver_hmac == $hmac;
-        } catch (Exception $e) {
-            Log::info('problem with verify hmac');
-            Log::info($e->getMessage() . ' ' . $e->getLine());
-        }
-    }
-
     private function checkIfAccessTokenIsValid($storeDetails)
     {
         try {
@@ -188,12 +206,10 @@ class InstallationController extends Controller
                 $token = $storeDetails->access_token;
                 $endpoint = getShopifyURLForStore('shop.json', $storeDetails);
                 $headers = getShopifyHeadersForStore($storeDetails);
-                $response = $this->makeAnAPICallToShop('GET', $endpoint, null, $headers, null);
-
-                Log::info($response);
-
-                return $response['statusCode'] == 200;
+                $response = $this->makeAnAPICallToShopify('GET', $endpoint, null, $headers, null);
+                return $response['statusCode'] === 200;
             }
+            return false;
         } catch (Exception $e) {
             return false;
         }
